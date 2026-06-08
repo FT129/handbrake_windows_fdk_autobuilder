@@ -1,0 +1,70 @@
+name: Build HandBrake CLI/DLL (Windows, FDK-AAC)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 1 * *" 
+jobs:
+  build-windows:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Get Latest Stable Version Number
+        id: get_version
+        run: |
+          LATEST_TAG=$(curl -s https://api.github.com/repos/HandBrake/HandBrake/releases/latest | jq -r .tag_name)
+          echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "Latest stable Version Number: $LATEST_TAG"
+
+      - name: Checkout HandBrake Repository
+        uses: actions/checkout@v4
+        with:
+          repository: HandBrake/HandBrake
+          ref: ${{ steps.get_version.outputs.tag }}
+          fetch-depth: 1
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y automake autoconf autopoint build-essential cmake \
+            gcc git intltool libtool libtool-bin m4 make meson nasm ninja-build \
+            patch pkg-config tar zlib1g-dev clang curl libssl-dev bison bzip2 \
+            flex g++ gzip pax python3-minimal
+
+      - name: Download and Install Cargo-C and Add Rust Target
+        run: |
+          mkdir -p ~/.cargo/bin
+          curl -L -o cargo-c.tar.gz https://github.com/lu-zero/cargo-c/releases/latest/download/cargo-c-x86_64-unknown-linux-musl.tar.gz          
+          tar -xzf cargo-c.tar.gz -C ~/.cargo/bin
+          rustup target add x86_64-pc-windows-gnu
+          
+      - name: Cache MinGW-w64 Toolchain
+        id: cache-mingw
+        uses: actions/cache@v4
+        with:
+          path: ~/toolchains
+          key: ${{ runner.os }}-mingw-w64-${{ hashFiles('scripts/mingw-w64-build') }}
+
+      - name: Build MinGW-w64 Toolchain
+        if: steps.cache-mingw.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/toolchains
+          ./scripts/mingw-w64-build x86_64 ~/toolchains/
+
+      - name: Build HandBrake CLI and DLL
+        run: |
+          TOOLCHAIN_GCC=$(find ~/toolchains -name "x86_64-w64-mingw32-gcc" | head -n 1)
+          TOOLCHAIN_BIN=$(dirname "$TOOLCHAIN_GCC")
+          
+          export PATH="$TOOLCHAIN_BIN:$PATH"
+          
+          ./configure --cross=x86_64-w64-mingw32 --enable-fdk-aac --launch-jobs=$(nproc) --launch
+
+      - name: Upload HandBrake Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: HandBrake-Windows-FDK-AAC
+          path: |
+            build/HandBrakeCLI.exe
+            build/libhb/hb.dll
+          if-no-files-found: error
