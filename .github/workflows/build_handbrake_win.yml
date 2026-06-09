@@ -16,13 +16,15 @@ jobs:
           echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
           echo "Latest stable Version Number: $LATEST_TAG"
 
-      - name: Checkout HandBrake Repository
+      - name: Clone HandBrake Repo
         uses: actions/checkout@v4
         with:
           repository: HandBrake/HandBrake
-          ref: ${{ steps.get_version.outputs.tag }}
           fetch-depth: 0
-          fetch-tags: true
+      
+      - name: Git Checkout
+        run: |
+          git checkout refs/tags/${{ steps.get_version.outputs.tag }}
 
 
       - name: Install System Dependencies
