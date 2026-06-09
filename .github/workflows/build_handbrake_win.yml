@@ -22,6 +22,8 @@ jobs:
           repository: HandBrake/HandBrake
           ref: ${{ steps.get_version.outputs.tag }}
           fetch-depth: 0
+          fetch-tags: true
+
 
       - name: Install System Dependencies
         run: |
